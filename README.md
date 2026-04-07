@@ -43,8 +43,8 @@ flowchart LR
 flowchart LR
     A[User mood input] --> B[LLM prompt-type selector]
     B --> C{Selected type valid?}
-    C -- Yes --> D[gold / cozy / relatable / clever / personalized]
-    C -- No --> E[Fallback to gold]
+    C -- Yes --> D[default / cozy / relatable / clever / personalized]
+    C -- No --> E[Fallback to default]
     D --> F[Build final joke prompt]
     E --> F
 ```
@@ -70,7 +70,7 @@ lib/
 
 ### Joke Result
 
-![Generated joke result](./screenshots/joke-result.png)
+<img src="./screenshots/joke-result.png" alt="Generated joke result" width="520" />
 
 ## Local Setup
 
