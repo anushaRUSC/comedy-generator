@@ -19,7 +19,7 @@ The experience is designed to feel calm and lightweight:
 ## User Flow
 
 ```mermaid
-flowchart TD
+flowchart LR
     A[Enter mood] --> B[Generate joke]
     B --> C[View personalized joke]
     C --> D[Try a different mood]
@@ -28,18 +28,13 @@ flowchart TD
 ## API Flow
 
 ```mermaid
-flowchart TD
-    A[POST /api/generate-joke] --> B{Mood provided?}
-    B -- No --> C[Return 400 error]
-    B -- Yes --> D{OpenAI client configured?}
-    D -- No --> E[Use rule-based fallback joke]
-    D -- Yes --> F[Select prompt type with LLM]
-    F --> G[Normalize and validate type]
-    G --> H[Build prompt template]
-    H --> I[Generate joke with OpenAI]
-    I --> J{Valid joke returned?}
-    J -- Yes --> K[Clean formatting and return JSON]
-    J -- No --> L[Log error and use fallback joke]
+flowchart LR
+    A[Receive mood] --> B{OpenAI available?}
+    B -- Yes --> C[Select prompt type]
+    C --> D[Generate joke]
+    D --> E[Return cleaned response]
+    B -- No / failure --> F[Use fallback joke]
+    F --> E
 ```
 
 ## Prompt Selection Flow
@@ -73,19 +68,9 @@ lib/
 
 ## Screenshots
 
-Add your actual screenshots later by replacing the placeholder paths below.
-
-### Home Screen
-
-```md
-![Home screen](./screenshots/home-screen.png)
-```
-
 ### Joke Result
 
-```md
 ![Generated joke result](./screenshots/joke-result.png)
-```
 
 ## Local Setup
 
