@@ -1,31 +1,139 @@
 # Mood Joke Generator
 
-A simple Next.js app that turns a user's mood into a short rule-based joke.
+Mood Joke Generator is a small web app that turns a user's mood into a short, warm, personalized joke.
 
-## Tech
+The experience is designed to feel calm and lightweight:
+- enter a mood
+- generate a joke
+- get a soft, human-feeling response
+- quickly try again with a different mood
 
-- Next.js
-- TypeScript
-- Tailwind CSS
+## What It Does
 
-## Run locally
+- Accepts a free-text mood input from the user
+- Sends the mood to a server-side API route
+- Uses AI to choose the best prompt style for that input
+- Generates a short joke tailored to the user's mood
+- Falls back to a local rule-based joke if the AI request fails
+
+## User Flow
+
+```mermaid
+flowchart TD
+    A[Enter mood] --> B[Generate joke]
+    B --> C[View personalized joke]
+    C --> D[Try a different mood]
+```
+
+## API Flow
+
+```mermaid
+flowchart TD
+    A[POST /api/generate-joke] --> B{Mood provided?}
+    B -- No --> C[Return 400 error]
+    B -- Yes --> D{OpenAI client configured?}
+    D -- No --> E[Use rule-based fallback joke]
+    D -- Yes --> F[Select prompt type with LLM]
+    F --> G[Normalize and validate type]
+    G --> H[Build prompt template]
+    H --> I[Generate joke with OpenAI]
+    I --> J{Valid joke returned?}
+    J -- Yes --> K[Clean formatting and return JSON]
+    J -- No --> L[Log error and use fallback joke]
+```
+
+## Prompt Selection Flow
+
+```mermaid
+flowchart LR
+    A[User mood input] --> B[LLM prompt-type selector]
+    B --> C{Selected type valid?}
+    C -- Yes --> D[gold / cozy / relatable / clever / personalized]
+    C -- No --> E[Fallback to gold]
+    D --> F[Build final joke prompt]
+    E --> F
+```
+
+## Project Structure
+
+```text
+app/
+  api/generate-joke/route.ts   # API route for prompt selection + joke generation
+  globals.css                  # Global styles
+  layout.tsx                   # App shell
+  page.tsx                     # Home page
+
+components/
+  JokeCard.tsx                 # Joke display card
+  MoodJokeGenerator.tsx        # Main input + interaction flow
+
+lib/
+  joke-generator.ts            # Rule-based fallback joke generator
+```
+
+## Screenshots
+
+Add your actual screenshots later by replacing the placeholder paths below.
+
+### Home Screen
+
+```md
+![Home screen](./screenshots/home-screen.png)
+```
+
+### Joke Result
+
+```md
+![Generated joke result](./screenshots/joke-result.png)
+```
+
+## Local Setup
+
+1. Install dependencies:
 
 ```bash
 npm install
+```
+
+2. Create your local environment file:
+
+```bash
 cp .env.example .env.local
 ```
 
-Add your OpenAI API key to `.env.local`:
+3. Add your OpenAI API key to `.env.local`:
 
 ```bash
 OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-Then run:
+4. Start the development server:
 
 ```bash
-npm install
 npm run dev
 ```
 
-Then open `http://localhost:3000`.
+5. Open:
+
+```text
+http://localhost:3000
+```
+
+## Environment Variables
+
+- `OPENAI_API_KEY`
+  Used only on the server in the API route.
+
+`.env.local` is ignored by git, so your local secret is not committed.
+
+## Fallback Behavior
+
+If OpenAI is unavailable, the app still returns a joke by using the local rule-based fallback in [`lib/joke-generator.ts`](./lib/joke-generator.ts).
+
+This helps ensure the user almost always gets a result instead of a dead end.
+
+## Notes
+
+- The UI is intentionally minimal and calm
+- Joke generation is short by design: 1-2 lines
+- Prompt style selection happens server-side before the final joke is generated

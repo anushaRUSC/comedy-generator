@@ -51,7 +51,7 @@ export function MoodJokeGenerator() {
   return (
     <div className="w-full max-w-[36rem] px-1 sm:px-0">
       <div className="text-center">
-        <h1 className="whitespace-nowrap font-display text-[2.2rem] font-normal leading-none tracking-[-0.025em] text-ink sm:text-[3rem]">
+        <h1 className="whitespace-nowrap font-doodle text-[2.15rem] leading-none text-ink sm:text-[2.95rem]">
           How are you feeling?
         </h1>
       </div>
