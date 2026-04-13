@@ -72,7 +72,11 @@ lib/
 
 ### Joke Result
 
-<img src="./screenshots/joke-result.png" alt="Generated joke result" width="520" />
+<img src="./screenshots/MyWay_GPS.png" alt="Generated joke result - MyWay GPS" width="360" />
+
+<img src="./screenshots/Happy.png" alt="Generated joke result - Happy mood" width="360" />
+
+<img src="./screenshots/Overworked.png" alt="Generated joke result - Overworked mood" width="360" />
 
 ## Local Setup
 
