@@ -7,6 +7,30 @@ type JokeRequest = {
 };
 
 type PromptType = "gold" | "cozy" | "relatable" | "clever" | "personalized";
+type EmotionType =
+  | "tired"
+  | "overwhelmed"
+  | "sad"
+  | "frustrated"
+  | "happy"
+  | "excited"
+  | "confused"
+  | "bored"
+  | "reflective";
+
+type EmotionScore = {
+  type: EmotionType;
+  intensity: number;
+};
+
+type EmotionClassification = {
+  emotions: EmotionScore[];
+};
+
+type PromptEmotionContext = {
+  primaryEmotion?: EmotionScore;
+  secondaryEmotion?: EmotionScore;
+};
 
 const client = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -18,6 +42,18 @@ const validPromptTypes: PromptType[] = [
   "relatable",
   "clever",
   "personalized"
+];
+
+const validEmotionTypes: EmotionType[] = [
+  "tired",
+  "overwhelmed",
+  "sad",
+  "frustrated",
+  "happy",
+  "excited",
+  "confused",
+  "bored",
+  "reflective"
 ];
 
 function cleanJokeText(text: string) {
@@ -32,22 +68,62 @@ function cleanJokeText(text: string) {
     .trim();
 }
 
-function isPromptType(value: string): value is PromptType {
-  return validPromptTypes.includes(value as PromptType);
+function isEmotionType(value: string): value is EmotionType {
+  return validEmotionTypes.includes(value as EmotionType);
 }
 
-function normalizePromptType(text: string): string {
-  return cleanJokeText(text)
-    .toLowerCase()
-    .replace(/[^a-z]/g, " ")
-    .trim()
-    .split(/\s+/)[0] ?? "";
+function extractJsonObject(text: string): string {
+  const cleaned = cleanJokeText(text).replace(/^```json|^```|```$/gm, "").trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+
+  if (start === -1 || end === -1 || end < start) {
+    return cleaned;
+  }
+
+  return cleaned.slice(start, end + 1);
 }
 
-async function selectPromptType(userInput: string): Promise<PromptType> {
+function safeParseEmotionClassification(text: string): EmotionClassification | null {
+  try {
+    const parsed = JSON.parse(extractJsonObject(text)) as {
+      emotions?: Array<{ type?: string; intensity?: number }>;
+    };
+
+    if (!Array.isArray(parsed.emotions)) {
+      return null;
+    }
+
+    const emotions = parsed.emotions
+      .map((emotion) => {
+        const type = emotion.type?.toLowerCase().trim();
+        const intensity = emotion.intensity;
+
+        if (!type || !isEmotionType(type) || typeof intensity !== "number") {
+          return null;
+        }
+
+        return {
+          type,
+          intensity: Math.max(0, Math.min(1, intensity))
+        };
+      })
+      .filter((emotion): emotion is EmotionScore => emotion !== null)
+      .sort((left, right) => right.intensity - left.intensity)
+      .slice(0, 3);
+
+    return { emotions };
+  } catch (error) {
+    console.error("Emotion JSON parsing failed:", error);
+    return null;
+  }
+}
+
+async function classifyEmotions(input: string): Promise<EmotionClassification> {
+  const fallback = { emotions: [] };
+
   if (!client) {
-    console.log('Selected prompt type: gold (fallback, no OpenAI client)');
-    return "gold";
+    return fallback;
   }
 
   try {
@@ -56,53 +132,133 @@ async function selectPromptType(userInput: string): Promise<PromptType> {
       input: [
         {
           role: "system",
-          content: `Select the best prompt style for generating a joke based on the user's mood.
+          content: `Analyze the user's emotional state.
 
-Input: ${userInput}
+Input: ${input}
 
-Available styles:
-- gold: balanced, generally good for any mood
-- cozy: for tired, low-energy, or soft moods
-- relatable: for overwhelmed, anxious, or stressed moods
-- clever: for happy, playful, or upbeat moods
-- personalized: for specific or nuanced emotional input
+Detect up to 3 emotions from:
+tired, overwhelmed, sad, frustrated, happy, excited, confused, bored, reflective
+
+For each emotion:
+- assign an intensity between 0 and 1
+- 1 = very strong emotion
+- 0.3 = mild
 
 Rules:
-- Choose the SINGLE best style
-- Output ONLY one word from: gold, cozy, relatable, clever, personalized
-- Do not explain your choice`
+- Return ONLY valid JSON
+- Max 3 emotions
+- Sort by intensity (highest first)
+
+Output format:
+{
+  "emotions": [
+    { "type": "...", "intensity": 0.0 }
+  ]
+}`
         }
       ]
     });
 
-    const rawType = response.output_text;
-    const normalizedType = normalizePromptType(rawType);
+    const parsed = safeParseEmotionClassification(response.output_text);
 
-    if (isPromptType(normalizedType)) {
-      console.log(`Selected prompt type: ${normalizedType}`);
-      return normalizedType;
+    if (!parsed) {
+      console.warn("Emotion classification returned invalid JSON. Falling back to empty list.");
+      return fallback;
     }
 
-    console.warn(
-      `Invalid prompt type from selector: "${cleanJokeText(rawType)}". Falling back to gold.`
-    );
-    console.log("Selected prompt type: gold");
-    return "gold";
+    return parsed;
   } catch (error) {
-    console.error("Prompt type selection failed:", error);
-    console.log("Selected prompt type: gold");
-    return "gold";
+    console.error("Emotion classification failed:", error);
+    return fallback;
   }
 }
 
-function getGoldPrompt(input: string) {
+function selectPromptTypeFromEmotions(classification: EmotionClassification): PromptType {
+  const primaryEmotion = classification.emotions[0];
+
+  if (!primaryEmotion) {
+    console.log("Selected prompt type: gold (fallback, no classified emotions)");
+    return "gold";
+  }
+
+  switch (primaryEmotion.type) {
+    case "tired":
+    case "sad":
+      console.log(`Selected prompt type: cozy (primary emotion: ${primaryEmotion.type})`);
+      return "cozy";
+    case "overwhelmed":
+    case "confused":
+      console.log(`Selected prompt type: relatable (primary emotion: ${primaryEmotion.type})`);
+      return "relatable";
+    case "happy":
+    case "excited":
+      console.log(`Selected prompt type: clever (primary emotion: ${primaryEmotion.type})`);
+      return "clever";
+    case "reflective":
+      console.log(`Selected prompt type: personalized (primary emotion: ${primaryEmotion.type})`);
+      return "personalized";
+    default:
+      console.log(`Selected prompt type: gold (primary emotion: ${primaryEmotion.type})`);
+      return "gold";
+  }
+}
+
+function getPromptEmotionContext(classification: EmotionClassification): PromptEmotionContext {
+  const [primaryEmotion, secondaryEmotion] = classification.emotions;
+
+  return {
+    primaryEmotion,
+    secondaryEmotion
+  };
+}
+
+function buildEmotionSection({ primaryEmotion, secondaryEmotion }: PromptEmotionContext): string {
+  if (!primaryEmotion) {
+    return "";
+  }
+
+  const lines = [
+    "The user feels:",
+    `- ${primaryEmotion.type} (intensity: ${primaryEmotion.intensity.toFixed(1)})`
+  ];
+
+  if (secondaryEmotion) {
+    lines.push(`- ${secondaryEmotion.type} (intensity: ${secondaryEmotion.intensity.toFixed(1)})`);
+  }
+
+  return `\n\n${lines.join("\n")}`;
+}
+
+function buildIntensityGuidance({ primaryEmotion, secondaryEmotion }: PromptEmotionContext): string {
+  if (!primaryEmotion) {
+    return "";
+  }
+
+  const toneRule =
+    primaryEmotion.intensity > 0.8
+      ? "- The primary emotion is strong, so use very gentle, comforting humor and avoid strong jokes or sarcasm"
+      : primaryEmotion.intensity >= 0.4
+        ? "- The emotion intensity is moderate, so use balanced humor that feels supportive with a light joke"
+        : "- The emotion intensity is mild, so you can allow slightly more playful or witty humor while staying kind";
+
+  if (!secondaryEmotion) {
+    return `\n\nTone guidance:\n${toneRule}\n- Let the primary emotion drive the overall tone`;
+  }
+
+  return `\n\nTone guidance:\n${toneRule}\n- Let the primary emotion drive the overall tone\n- Subtly incorporate the secondary emotion as nuance, like the user is ${primaryEmotion.type} but also ${secondaryEmotion.type}`;
+}
+
+function getGoldPrompt(input: string, context: PromptEmotionContext) {
+  const emotionSection = buildEmotionSection(context);
+  const intensityGuidance = buildIntensityGuidance(context);
+
   return `You are a warm, emotionally intelligent, and witty assistant.
 
 Task:
 Generate a short, kind, and relatable joke based on the user's mood.
 
 User mood:
-"${input}"
+"${input}"${emotionSection}${intensityGuidance}
 
 Guidelines:
 - Keep it 1-2 lines maximum
@@ -124,11 +280,14 @@ Output:
 Return ONLY the joke text (no explanations, no quotes).`;
 }
 
-function getCozyPrompt(input: string) {
+function getCozyPrompt(input: string, context: PromptEmotionContext) {
+  const emotionSection = buildEmotionSection(context);
+  const intensityGuidance = buildIntensityGuidance(context);
+
   return `You are a cozy, kind, slightly playful companion.
 
 User mood:
-"${input}"
+"${input}"${emotionSection}${intensityGuidance}
 
 Task:
 Write a soft, comforting, slightly funny line that brings a small smile.
@@ -146,11 +305,14 @@ Output:
 Only the joke text.`;
 }
 
-function getRelatablePrompt(input: string) {
+function getRelatablePrompt(input: string, context: PromptEmotionContext) {
+  const emotionSection = buildEmotionSection(context);
+  const intensityGuidance = buildIntensityGuidance(context);
+
   return `You are writing a small, comforting joke that makes someone feel seen.
 
 User mood:
-"${input}"
+"${input}"${emotionSection}${intensityGuidance}
 
 Instructions:
 - Turn this mood into a VERY relatable everyday situation
@@ -169,11 +331,14 @@ Output:
 Only the final joke.`;
 }
 
-function getCleverPrompt(input: string) {
+function getCleverPrompt(input: string, context: PromptEmotionContext) {
+  const emotionSection = buildEmotionSection(context);
+  const intensityGuidance = buildIntensityGuidance(context);
+
   return `You are a witty but kind humor writer.
 
 User mood:
-"${input}"
+"${input}"${emotionSection}${intensityGuidance}
 
 Task:
 Create a clever, relatable joke that lightly reflects this mood.
@@ -190,11 +355,14 @@ Output:
 Only the joke.`;
 }
 
-function getPersonalizedPrompt(input: string) {
+function getPersonalizedPrompt(input: string, context: PromptEmotionContext) {
+  const emotionSection = buildEmotionSection(context);
+  const intensityGuidance = buildIntensityGuidance(context);
+
   return `You are writing a personalized, mood-aware joke.
 
 User input:
-"${input}"
+"${input}"${emotionSection}${intensityGuidance}
 
 Task:
 - Extract the emotional tone from the input
@@ -210,19 +378,21 @@ Output:
 Only the joke text.`;
 }
 
-function buildPrompt(type: string, input: string): string {
+function buildPrompt(type: string, input: string, emotions: EmotionClassification): string {
+  const context = getPromptEmotionContext(emotions);
+
   switch (type) {
     case "cozy":
-      return getCozyPrompt(input);
+      return getCozyPrompt(input, context);
     case "relatable":
-      return getRelatablePrompt(input);
+      return getRelatablePrompt(input, context);
     case "clever":
-      return getCleverPrompt(input);
+      return getCleverPrompt(input, context);
     case "personalized":
-      return getPersonalizedPrompt(input);
+      return getPersonalizedPrompt(input, context);
     case "gold":
     default:
-      return getGoldPrompt(input);
+      return getGoldPrompt(input, context);
   }
 }
 
@@ -241,8 +411,9 @@ export async function POST(request: Request) {
     }
 
     try {
-      const promptType = await selectPromptType(mood);
-      const prompt = buildPrompt(promptType, mood);
+      const emotions = await classifyEmotions(mood);
+      const promptType = selectPromptTypeFromEmotions(emotions);
+      const prompt = buildPrompt(promptType, mood, emotions);
 
       const response = await client.responses.create({
         model: "gpt-5",
