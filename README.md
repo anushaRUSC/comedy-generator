@@ -12,8 +12,10 @@ The experience is designed to feel calm and lightweight:
 
 - Accepts a free-text mood input from the user
 - Sends the mood to a server-side API route
-- Uses AI to choose the best prompt style for that input
-- Generates a short joke tailored to the user's mood
+- Uses AI to detect up to 3 emotions with intensity scores
+- Selects the joke prompt style from the primary emotion
+- Uses a secondary emotion, when present, to add nuance
+- Generates a short joke tailored to the user's emotional mix
 - Falls back to a local rule-based joke if the AI request fails
 
 ## User Flow
@@ -30,30 +32,30 @@ flowchart LR
 ```mermaid
 flowchart LR
     A[Receive mood] --> B{OpenAI available?}
-    B -- Yes --> C[Select prompt type]
-    C --> D[Generate joke]
-    D --> E[Return cleaned response]
-    B -- No / failure --> F[Use fallback joke]
-    F --> E
+    B -- Yes --> C[Classify emotions]
+    C --> D[Select prompt style]
+    D --> E[Generate joke]
+    E --> F[Return cleaned response]
+    B -- No / failure --> G[Use fallback joke]
+    G --> H[Return response]
 ```
 
-## Prompt Selection Flow
+## Emotion Analysis Flow
 
 ```mermaid
 flowchart LR
-    A[User mood input] --> B[LLM prompt-type selector]
-    B --> C{Selected type valid?}
-    C -- Yes --> D[default / cozy / relatable / clever / personalized]
-    C -- No --> E[Fallback to default]
-    D --> F[Build final joke prompt]
-    E --> F
+    A[User input] --> B[Detect up to 3 emotions]
+    B --> C[Rank by intensity]
+    C --> D[Primary emotion sets prompt style]
+    D --> E[Secondary emotion adds nuance]
+    E --> F[Build final joke prompt]
 ```
 
 ## Project Structure
 
 ```text
 app/
-  api/generate-joke/route.ts   # API route for prompt selection + joke generation
+  api/generate-joke/route.ts   # API route for emotion analysis + joke generation
   globals.css                  # Global styles
   layout.tsx                   # App shell
   page.tsx                     # Home page
@@ -121,4 +123,5 @@ This helps ensure the user almost always gets a result instead of a dead end.
 
 - The UI is intentionally minimal and calm
 - Joke generation is short by design: 1-2 lines
-- Prompt style selection happens server-side before the final joke is generated
+- Emotion analysis and prompt selection happen server-side before the final joke is generated
+- Primary emotion drives the humor tone, while secondary emotion adds nuance
